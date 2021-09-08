@@ -218,7 +218,7 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
 
 
 fn get_section_variant(entry: &str) -> Result<EntryType, anyhow::Error> {
-//["Accounts", "Options", "Commodities", "Other Entries", "Prices", "Transactions"]
+//["Header", "Accounts", "Options", "Commodities", "Other Entries", "Prices", "Transactions"]
     let entry_type = match entry {
         "Accounts" => EntryType::Account,
         "Options" => EntryType::Option,
@@ -271,5 +271,19 @@ fn main () -> Result<()> {
 
 #[cfg(test)]
 mod test {
+    use std::mem::discriminant;
+
     use super::*;
+
+    #[test]
+    fn test_get_section_variant() {
+        assert_eq!(discriminant(&get_section_variant("Header").unwrap()), discriminant(&EntryType::Header));
+        assert_eq!(discriminant(&get_section_variant("Accounts").unwrap()), discriminant(&EntryType::Account));
+        assert_eq!(discriminant(&get_section_variant("Options").unwrap()), discriminant(&EntryType::Option));
+        assert_eq!(discriminant(&get_section_variant("Commodities").unwrap()), discriminant(&EntryType::Commodity));
+        assert_eq!(discriminant(&get_section_variant("Other Entries").unwrap()), discriminant(&EntryType::OtherEntry));
+        assert_eq!(discriminant(&get_section_variant("Prices").unwrap()), discriminant(&EntryType::Price));
+        assert_eq!(discriminant(&get_section_variant("Transactions").unwrap()), discriminant(&EntryType::Transaction));
+        assert!(get_section_variant("abcdefg").is_err());
+    }
 }
