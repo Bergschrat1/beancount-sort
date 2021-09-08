@@ -18,6 +18,8 @@ struct Cli {
     out: PathBuf,
     #[structopt(short, long, default_value = "0")]
     skipn: usize,
+    #[structopt(long)]
+    spaces: bool,
 }
 
 const SECTIONS: [&str; 7] = ["Header",  "Accounts", "Options", "Commodities", "Other Entries", "Prices", "Transactions"];
@@ -29,10 +31,9 @@ struct LedgerFile {
     entries: Vec<Entry>
 }
 impl LedgerFile {
-    fn write_ledger_file(self, path: &PathBuf) -> Result<(), anyhow::Error> {
+    fn write_ledger_file(self, path: &PathBuf, spaces: &bool) -> Result<(), anyhow::Error> {
         // check if path exist
         // match for every entry type and append content to file
-        // TODO Alternative: use SingleLineEntry and MultiLineEntry instead of all the Entry variants
         if path.exists() {
             remove_file(path).unwrap()
         };
@@ -42,9 +43,13 @@ impl LedgerFile {
                                          .unwrap();
         for entry in self.entries {
             let output = entry.content;
-            if let Err(e) = writeln!(file, "{}", output) {
+            if let Err(e) = writeln!(file, "{}", &output) {
                 return Err(anyhow!("Couldnt write to file: {}", e));
-            }
+            };
+            if *spaces {
+                // insert empty line if "spaces" flag is given
+                writeln!(file, "").unwrap()
+            };
         };
         Ok(())
     }
@@ -147,7 +152,6 @@ fn construct_dated_entry(line: &String, date: NaiveDate) -> Result<Entry, anyhow
         "price" => Entry{content: line.to_owned(), date: date, entry_type: EntryType::Price},
         "open" => Entry{content: line.to_owned(), date: date, entry_type: EntryType::Account},
         _ => Entry{content: line.to_owned(), date: date, entry_type: EntryType::OtherEntry}
-            // TODO check if single line is always accurat
     };
     Ok(entry)
 }
@@ -261,7 +265,7 @@ fn main () -> Result<()> {
     let mut ledger_file = read_file(&args.path).unwrap();
     ledger_file = find_entries(ledger_file, args.skipn).unwrap();
     ledger_file.entries = sort_entries(ledger_file.entries).unwrap();
-    ledger_file.write_ledger_file(&args.out).unwrap();
+    ledger_file.write_ledger_file(&args.out, &args.spaces).unwrap();
     Ok(())
 }
 
