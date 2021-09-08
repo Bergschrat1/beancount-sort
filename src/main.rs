@@ -1,5 +1,4 @@
-use std::{env, fs::{OpenOptions, remove_file}, io::{BufReader, BufRead}, mem, path::PathBuf};
-use std::io::prelude::*;
+use std::{env, fs::{OpenOptions, remove_file}, io::{BufRead, BufReader, prelude::*}, mem, path::{Path, PathBuf}};
 use regex::Regex;
 use log::info;
 use structopt::StructOpt;
@@ -31,7 +30,7 @@ struct LedgerFile {
     entries: Vec<Entry>
 }
 impl LedgerFile {
-    fn write_ledger_file(self, path: &PathBuf, spaces: &bool) -> Result<(), anyhow::Error> {
+    fn write_ledger_file(self, path: &Path, spaces: &bool) -> Result<(), anyhow::Error> {
         // check if path exist
         // match for every entry type and append content to file
         if path.exists() {
@@ -48,7 +47,7 @@ impl LedgerFile {
             };
             if *spaces {
                 // insert empty line if "spaces" flag is given
-                writeln!(file, "").unwrap()
+                writeln!(file).unwrap()
             };
         };
         Ok(())
@@ -86,10 +85,10 @@ enum Line {
     Empty,
 }
 
-fn read_file(path: &PathBuf) -> Result<LedgerFile, anyhow::Error> {
+fn read_file(path: &Path) -> Result<LedgerFile, anyhow::Error> {
     let display = path.display();
     let ledger_file = LedgerFile {
-        path: path.clone(),
+        path: path.to_path_buf(),
         file: match std::fs::File::open(path) {
             Err(why) => panic!("Couldn't open file {}: {}", display, why),
             Ok(file) => file,
@@ -99,7 +98,7 @@ fn read_file(path: &PathBuf) -> Result<LedgerFile, anyhow::Error> {
     Ok(ledger_file)
 }
 
-fn backup_file(path: &PathBuf) -> Result<(), anyhow::Error> {
+fn backup_file(path: &Path) -> Result<(), anyhow::Error> {
     let path_backup = path.with_file_name(format!("{}_backup.{}",
                                                   path.file_stem().unwrap().to_string_lossy(),
                                                   path.extension().unwrap().to_string_lossy()));
@@ -112,9 +111,9 @@ fn backup_file(path: &PathBuf) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn get_line_type(line: &String, n: &usize) -> Result<Line, anyhow::Error> {
+fn get_line_type(line: &str, n: &usize) -> Result<Line, anyhow::Error> {
     let re_first = Regex::new(r"^(.*?) ").unwrap();
-    let matches = re_first.captures(&line);
+    let matches = re_first.captures(line);
     let first_thing = match matches {
         Some(m) => m.get(1).unwrap().as_str().to_string(),
         None => String::from("")
@@ -124,45 +123,45 @@ fn get_line_type(line: &String, n: &usize) -> Result<Line, anyhow::Error> {
     let re_comment = Regex::new(r"^(;+)").unwrap();
     let re_indented = Regex::new(r"(?m)(^ +)\S").unwrap();
     let re_empty = Regex::new(r"^.{0}$").unwrap();
-    if re_date.is_match(&line) {
+    if re_date.is_match(line) {
         Ok(Line::Date(NaiveDate::parse_from_str(&first_thing, "%Y-%m-%d").unwrap()))
-    } else if re_option.is_match(&line) {
+    } else if re_option.is_match(line) {
         Ok(Line::Option)
-    } else if re_comment.is_match(&line) {
+    } else if re_comment.is_match(line) {
         Ok(Line::Comment)
-    } else if re_indented.is_match(&line) {
+    } else if re_indented.is_match(line) {
         Ok(Line::Indent)
-    } else if re_empty.is_match(&line) {
+    } else if re_empty.is_match(line) {
         Ok(Line::Empty)
     } else {
         Err(anyhow!("Can't define line {}: \"{}\"", n, line))
     }
 }
 
-fn construct_dated_entry(line: &String, date: NaiveDate) -> Result<Entry, anyhow::Error> {
+fn construct_dated_entry(line: &str, date: NaiveDate) -> Result<Entry, anyhow::Error> {
     let re = Regex::new(r"^\d{4}-[01]\d-[0-3]\d (\w+|\*|!)").unwrap();
-    let matches = re.captures(&line);
+    let matches = re.captures(line);
     let directive_string = match matches {
         Some(m) => m.get(1).unwrap().as_str(),
         None => return Err(anyhow!("Couldn't finde entry type."))
     };
     let entry = match directive_string {
-        "*" | "!" => Entry{content: line.to_owned(), date: date, entry_type: EntryType::Transaction},
-        "commodity" => Entry{content: line.to_owned(), date: date, entry_type: EntryType::Commodity},
-        "price" => Entry{content: line.to_owned(), date: date, entry_type: EntryType::Price},
-        "open" => Entry{content: line.to_owned(), date: date, entry_type: EntryType::Account},
-        _ => Entry{content: line.to_owned(), date: date, entry_type: EntryType::OtherEntry}
+        "*" | "!" => Entry{content: line.to_owned(), date, entry_type: EntryType::Transaction},
+        "commodity" => Entry{content: line.to_owned(), date, entry_type: EntryType::Commodity},
+        "price" => Entry{content: line.to_owned(), date, entry_type: EntryType::Price},
+        "open" => Entry{content: line.to_owned(), date, entry_type: EntryType::Account},
+        _ => Entry{content: line.to_owned(), date, entry_type: EntryType::OtherEntry}
     };
     Ok(entry)
 }
 
 fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile, anyhow::Error> {
     let reader = BufReader::new(&ledger_file.file);
-    let mut lines = reader.lines().into_iter();
+    let mut lines = reader.lines();
     let mut line_vec: Vec<(String, Line)> = Vec::new();
     for _i in 0..n_skip {
         let line: String = lines.next().unwrap().unwrap();
-        let entry = Entry{content: line, date: NaiveDate::from_ymd(1990, 01, 01), entry_type: EntryType::Header};
+        let entry = Entry{content: line, date: NaiveDate::from_ymd(1990, 1, 1), entry_type: EntryType::Header};
         ledger_file.entries.push(entry)
     }
 
@@ -186,14 +185,14 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
             //  - empty
             //      - Ignore
             Line::Date(d) => construct_dated_entry(&line, d).unwrap(),
-            Line::Option => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 01, 01), entry_type: EntryType::Option},
-            Line::Comment => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 01, 01), entry_type: EntryType::Comment},
-            Line::Indent => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 01, 01), entry_type: EntryType::Indented},
+            Line::Option => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 1, 1), entry_type: EntryType::Option},
+            Line::Comment => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 1, 1), entry_type: EntryType::Comment},
+            Line::Indent => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 1, 1), entry_type: EntryType::Indented},
             Line::Empty => continue,
         };
         if let EntryType::Comment = ledger_file.entries.last().unwrap().entry_type {
             let comment_entry = ledger_file.entries.pop().unwrap();
-            entry.content = comment_entry.content + "\n".into() + &entry.content;
+            entry.content = comment_entry.content + "\n" + &entry.content;
         }
         if let EntryType::Indented = entry.entry_type {
             let last_entry = ledger_file.entries.pop().unwrap();
@@ -242,7 +241,7 @@ fn sort_entries(entries: Vec<Entry>) -> Result<Vec<Entry>, anyhow::Error> {
                                 &deco + section + &deco + "\n" +
                                 &deco + &";".repeat(section.len()) + &deco};
             let section_entry = Entry{content: section_string,
-                                      date: NaiveDate::from_ymd(1990, 01, 01),
+                                      date: NaiveDate::from_ymd(1990, 1, 1),
                                       entry_type: EntryType::Section};
             sorted_entries.push(section_entry);
         }
