@@ -41,10 +41,7 @@ impl LedgerFile {
                                          .open(path)
                                          .unwrap();
         for entry in self.entries {
-            let output = match entry {
-                Entry::SingleLine(sle) => sle.content,
-                Entry::MultiLine(mle) => mle.content,
-            };
+            let output = entry.content;
             if let Err(e) = writeln!(file, "{}", output) {
                 return Err(anyhow!("Couldnt write to file: {}", e));
             }
@@ -54,78 +51,25 @@ impl LedgerFile {
 }
 
 #[derive(Debug, Clone)]
-struct SingleLineEntry {
+struct Entry {
     content: String,
     //#[derivative(Default(value = "NaiveDate::from_ymd(2021, 1, 1)"))]
     date: NaiveDate,
     entry_type: EntryType,
-}
-
-#[derive(Debug, Clone)]
-struct MultiLineEntry {
-    content: String,
-    //#[derivative(Default(value = "NaiveDate::from_ymd(2021, 1, 1)"))]
-    date: NaiveDate,
-    entry_type: EntryType,
-}
-#[derive(Debug, Clone)]
-struct Account {
-    content: String,
-    //#[derivative(Default(value = "NaiveDate::from_ymd(2021, 1, 1)"))]
-    date: NaiveDate
-}
-
-#[derive(Debug, Clone)]
-struct Transaction {
-    content: String,
-    //#[derivative(Default(value = "NaiveDate::from_ymd(2021, 1, 1)"))]
-    date: NaiveDate
-}
-
-#[derive(Debug, Clone)]
-struct Price {
-    content: String,
-    //#[derivative(Default(value = "NaiveDate::from_ymd(2021, 1, 1)"))]
-    date: NaiveDate
-}
-
-#[derive(Debug, Clone, Default)]
-struct Option {
-    content: String,
-}
-
-#[derive(Debug, Clone)]
-struct Commodity {
-    content: String,
-    //#[derivative(Default(value = "NaiveDate::from_ymd(2021, 1, 1)"))]
-    date: NaiveDate
-}
-
-#[derive(Debug, Clone)]
-struct OtherEntry {
-    content: String,
-    //#[derivative(Default(value = "NaiveDate::from_ymd(2021, 1, 1)"))]
-    date: NaiveDate
 }
 
 #[derive(Debug, Clone)]
 enum EntryType {
-    Account(),
-    Option(),
-    Commodity(),
-    OtherEntry(),
-    Price(),
-    Transaction(),
-    Indented(),
-    Section(),
-    Header(),
-    Comment(),
-}
-
-#[derive(Debug, Clone)]
-enum Entry {
-    SingleLine(SingleLineEntry),
-    MultiLine(MultiLineEntry),
+    Account,
+    Option,
+    Commodity,
+    OtherEntry,
+    Price,
+    Transaction,
+    Indented,
+    Section,
+    Header,
+    Comment,
 }
 
 #[derive(Debug, Clone)]
@@ -198,11 +142,11 @@ fn construct_dated_entry(line: &String, date: NaiveDate) -> Result<Entry, anyhow
         None => return Err(anyhow!("Couldn't finde entry type."))
     };
     let entry = match directive_string {
-        "*" | "!" => Entry::MultiLine(MultiLineEntry{content: line.to_owned(), date: date, entry_type: EntryType::Transaction()}),
-        "commodity" => Entry::MultiLine(MultiLineEntry{content: line.to_owned(), date: date, entry_type: EntryType::Commodity()}),
-        "price" => Entry::SingleLine(SingleLineEntry{content: line.to_owned(), date: date, entry_type: EntryType::Price()}),
-        "open" => Entry::SingleLine(SingleLineEntry{content: line.to_owned(), date: date, entry_type: EntryType::Account()}),
-        _ => Entry::SingleLine(SingleLineEntry{content: line.to_owned(), date: date, entry_type: EntryType::OtherEntry()})
+        "*" | "!" => Entry{content: line.to_owned(), date: date, entry_type: EntryType::Transaction},
+        "commodity" => Entry{content: line.to_owned(), date: date, entry_type: EntryType::Commodity},
+        "price" => Entry{content: line.to_owned(), date: date, entry_type: EntryType::Price},
+        "open" => Entry{content: line.to_owned(), date: date, entry_type: EntryType::Account},
+        _ => Entry{content: line.to_owned(), date: date, entry_type: EntryType::OtherEntry}
             // TODO check if single line is always accurat
     };
     Ok(entry)
@@ -212,12 +156,9 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
     let reader = BufReader::new(&ledger_file.file);
     let mut lines = reader.lines().into_iter();
     let mut line_vec: Vec<(String, Line)> = Vec::new();
-    let mut was_comment = false;
     for _i in 0..n_skip {
         let line: String = lines.next().unwrap().unwrap();
-        let entry = Entry::SingleLine(SingleLineEntry{content: line,
-                                                      date: NaiveDate::from_ymd(1990, 01, 01),
-                                                      entry_type: EntryType::Header()});
+        let entry = Entry{content: line, date: NaiveDate::from_ymd(1990, 01, 01), entry_type: EntryType::Header};
         ledger_file.entries.push(entry)
     }
 
@@ -227,7 +168,7 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
         let line: String = line.unwrap();
         let line_type: Line = get_line_type(&line, &n).unwrap();
         line_vec.push((line.clone(), line_type.clone()));
-        let entry: Entry = match line_type {
+        let mut entry: Entry = match line_type {
             // Check start of each line
             //  - date
             //      - Check type
@@ -241,43 +182,32 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
             //  - empty
             //      - Ignore
             Line::Date(d) => construct_dated_entry(&line, d).unwrap(),
-            Line::Option => Entry::SingleLine(SingleLineEntry{content: line.to_owned(),
-                                                              date: NaiveDate::from_ymd(1990, 01, 01),
-                                                               entry_type: EntryType::Option()}),
-            Line::Comment => {was_comment = true;
-                              Entry::SingleLine(SingleLineEntry{content: line.to_owned(),
-                                                               date: NaiveDate::from_ymd(1990, 01, 01),
-                                                                entry_type: EntryType::Comment()})},
-            Line::Indent => Entry::MultiLine(MultiLineEntry{content: line.to_owned(),
-                                                            date: NaiveDate::from_ymd(1990, 01, 01),
-                                                            entry_type: EntryType::Indented()}),
+            Line::Option => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 01, 01), entry_type: EntryType::Option},
+            Line::Comment => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 01, 01), entry_type: EntryType::Comment},
+            Line::Indent => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 01, 01), entry_type: EntryType::Indented},
             Line::Empty => continue,
         };
-        match entry {
-            Entry::MultiLine(ref l) => {
-                // check if entry is an indented line
-                if let EntryType::Indented() = l.entry_type {
-                    let last_entry = ledger_file.entries.pop().unwrap();
-                    // continue only if last line was a MultiLine-Entry
-                    if let Entry::MultiLine(old_entry) = last_entry {
-                        let content_new = old_entry.content.to_owned() + "\n" + &l.content;
-                        let date_new = old_entry.date;
-                        let entry_type_new = old_entry.entry_type;
-                        let new_entry = Entry::MultiLine(MultiLineEntry{
-                            content: content_new,
-                            date: date_new,
-                            entry_type: entry_type_new,
-                        });
-                        ledger_file.entries.push(new_entry);
-                    } else {
-                        // otherwise panic
-                        return Err(anyhow!("Misplaced indented line: Line {}\n\"{:?}\"\n{:?}\n", n, l.content, last_entry))
-                    };
-                } else {
-                    ledger_file.entries.push(entry.clone())
-                }
-            },
-            Entry::SingleLine(ref _l) => ledger_file.entries.push(entry.clone()),
+        if let EntryType::Comment = ledger_file.entries.last().unwrap().entry_type {
+            let comment_entry = ledger_file.entries.pop().unwrap();
+            entry.content = comment_entry.content + "\n".into() + &entry.content;
+        }
+        if let EntryType::Indented = entry.entry_type {
+            let last_entry = ledger_file.entries.pop().unwrap();
+            // continue only if last line was a MultiLine-Entry
+            if let EntryType::Transaction | EntryType::Commodity = last_entry.entry_type {
+                let content_new = last_entry.content.to_owned() + "\n" + &entry.content;
+                let new_entry = Entry{
+                    content: content_new,
+                    date: last_entry.date,
+                    entry_type: last_entry.entry_type,
+                };
+                ledger_file.entries.push(new_entry);
+            } else {
+                // otherwise panic
+                return Err(anyhow!("Misplaced indented line: Line {}\n\"{}\"", n, entry.content))
+            };
+        } else {
+            ledger_file.entries.push(entry.clone())
         };
     };
     Ok(ledger_file)
@@ -287,22 +217,14 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
 fn get_section_variant(entry: &str) -> Result<EntryType, anyhow::Error> {
 //["Accounts", "Options", "Commodities", "Other Entries", "Prices", "Transactions"]
     let entry_type = match entry {
-        "Accounts" => EntryType::Account(),
-        "Options" => EntryType::Option(),
-        "Commodities" => EntryType::Commodity(),
-        "Other Entries" => EntryType::OtherEntry(),
-        "Prices" => EntryType::Price(),
-        "Transactions" => EntryType::Transaction(),
-        "Header" => EntryType::Header(),
+        "Accounts" => EntryType::Account,
+        "Options" => EntryType::Option,
+        "Commodities" => EntryType::Commodity,
+        "Other Entries" => EntryType::OtherEntry,
+        "Prices" => EntryType::Price,
+        "Transactions" => EntryType::Transaction,
+        "Header" => EntryType::Header,
         _ => return Err(anyhow!("Not handled Section Type \"{}\"", entry))
-    };
-    Ok(entry_type)
-}
-
-fn get_entry_type(entry: &Entry) -> Result<&EntryType, anyhow::Error> {
-    let entry_type = match entry {
-        Entry::MultiLine(mle) => &mle.entry_type,
-        Entry::SingleLine(sle) => &sle.entry_type,
     };
     Ok(entry_type)
 }
@@ -315,14 +237,14 @@ fn sort_entries(entries: Vec<Entry>) -> Result<Vec<Entry>, anyhow::Error> {
             let section_string = {deco.clone() + &";".repeat(section.len()) + &deco + "\n" +
                                 &deco + section + &deco + "\n" +
                                 &deco + &";".repeat(section.len()) + &deco};
-            let section_entry = Entry::MultiLine(MultiLineEntry{content: section_string,
-                                                                date: NaiveDate::from_ymd(1990, 01, 01),
-                                                                entry_type: EntryType::Section()});
+            let section_entry = Entry{content: section_string,
+                                      date: NaiveDate::from_ymd(1990, 01, 01),
+                                      entry_type: EntryType::Section};
             sorted_entries.push(section_entry);
         }
         let section_variant = get_section_variant(section).unwrap();
         let entries_iter = entries.iter();
-        entries_iter.filter(|e| mem::discriminant(get_entry_type(&e).unwrap()) == mem::discriminant(&section_variant))
+        entries_iter.filter(|e| mem::discriminant(&e.entry_type) == mem::discriminant(&section_variant))
                     .for_each(|entry| {
             sorted_entries.push(entry.to_owned())
         })
