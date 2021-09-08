@@ -10,15 +10,15 @@ use chrono::naive::NaiveDate;
 #[structopt(name = "beancount_sort", about = "Sorts a beancount file.")]
 struct Cli {
     // the path to the beancount file we want to sort
-    #[structopt(short, long, parse(from_os_str))]
-    path: PathBuf,
+    #[structopt(short, long, parse(from_os_str), help = "Filepath which has to be sorted.")]
+    file: PathBuf,
     // Comma-separated list of section names
     // sections: String,
-    #[structopt(short, long, parse(from_os_str))]
+    #[structopt(short, long, parse(from_os_str), help = "Where to write the sorted file?")]
     out: PathBuf,
-    #[structopt(short, long, default_value = "0")]
+    #[structopt(short, long, default_value = "0", help = "Leave the first n lines where they are. (e.g. for modline)")]
     skipn: usize,
-    #[structopt(long)]
+    #[structopt(long, help = "Leave one empty line between each entry?")]
     spaces: bool,
 }
 
@@ -260,9 +260,9 @@ fn main () -> Result<()> {
     let args = Cli::from_args();
     let current_dir = env::current_dir();
     info!("Current directory is {:?}", current_dir);
-    println!("Selected beancount file is {:?}", &args.path);
-    backup_file(&args.path)?;
-    let mut ledger_file = read_file(&args.path).unwrap();
+    println!("Selected beancount file is {:?}", &args.file);
+    backup_file(&args.file)?;
+    let mut ledger_file = read_file(&args.file).unwrap();
     ledger_file = find_entries(ledger_file, args.skipn).unwrap();
     ledger_file.entries = sort_entries(ledger_file.entries).unwrap();
     ledger_file.write_ledger_file(&args.out, &args.spaces).unwrap();
