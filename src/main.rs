@@ -190,9 +190,12 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
             Line::Indent => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 1, 1), entry_type: EntryType::Indented},
             Line::Empty => continue,
         };
-        if let EntryType::Comment = ledger_file.entries.last().unwrap().entry_type {
-            let comment_entry = ledger_file.entries.pop().unwrap();
-            entry.content = comment_entry.content + "\n" + &entry.content;
+        if !(n_skip == 0 && nn == 1) {
+            if let EntryType::Comment = ledger_file.entries.last().unwrap().entry_type {
+                let comment_entry = ledger_file.entries.pop().unwrap();
+                entry.content = comment_entry.content + "\n" + &entry.content;
+        }
+
         }
         if let EntryType::Indented = entry.entry_type {
             let last_entry = ledger_file.entries.pop().unwrap();
