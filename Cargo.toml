@@ -1,5 +1,13 @@
 [package]
 name = "beancount-sort"
+author = ["Josua Kehlenbach info@josuakehlenbach.eu"]
+license = "MIT"
+description = "A tool to sort a .beancount-file"
+readme = "README.md"
+homepage = "https://github.com/Bergschrat1/beancount-sort"
+repository = "https://github.com/Bergschrat1/beancount-sort"
+keywords = ["cli"]
+categories = ["command-line-utilities"]
 version = "0.1.0"
 edition = "2018"
 
