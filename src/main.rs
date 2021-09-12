@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use chrono::naive::NaiveDate;
 
 #[derive(StructOpt)]
-#[structopt(name = "beancount_sort", about = "Sorts a beancount file.")]
+#[structopt(name = "beancount-sort", about = "Sorts a beancount file.")]
 struct Cli {
     // the path to the beancount file we want to sort
     #[structopt(short, long, parse(from_os_str), help = "Filepath which has to be sorted.")]
