@@ -72,6 +72,9 @@ option "operating_currency" "EUR"
     Assets:Cash
 ~~~
 
+## Dependencies
+1. [beancount](https://beancount.github.io/docs/) (duh)
+2. [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html)
 ## Installation
 Type `cargo install beancount-sort`
 ## Usage
