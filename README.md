@@ -73,6 +73,6 @@ option "operating_currency" "EUR"
 ~~~
 
 ## Installation
-Type ~cargo install beancount-sort~
+Type `cargo install beancount-sort`
 ## Usage
-~beancount-sort --help~
+`beancount-sort --help`
