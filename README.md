@@ -79,3 +79,5 @@ option "operating_currency" "EUR"
 Type `cargo install beancount-sort`
 ## Usage
 `beancount-sort --help`
+Use with caution! If your output file is the same as the input file the original file will be overwritten!
+The program will create a backup of the original file, but if you run the program twice, the first backup will be overwritten.
