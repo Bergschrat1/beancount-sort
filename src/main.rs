@@ -23,6 +23,7 @@ struct Cli {
 
 const SECTIONS: [&str; 7] = ["Header",  "Accounts", "Options", "Commodities", "Other Entries", "Prices", "Transactions"];
 const NDECO: usize = 4; // number of "$" to use at section headings
+const DECO: &str = "€";
 
 #[derive(Debug)]
 struct LedgerFile {
@@ -125,7 +126,7 @@ fn get_line_type(line: &str, n: &usize) -> Result<Line, anyhow::Error> {
     let re_comment = Regex::new(r"^(;+)").unwrap();
     let re_indented = Regex::new(r"(?m)(^ +)\S").unwrap();
     let re_empty = Regex::new(r"^.{0}$").unwrap();
-    let re_section = Regex::new(format!("^;{}", "$".repeat(NDECO)).as_str()).unwrap();
+    let re_section = Regex::new(format!("^;{}", DECO.repeat(NDECO)).as_str()).unwrap();
     if re_date.is_match(line) {
         Ok(Line::Date(NaiveDate::parse_from_str(&first_thing, "%Y-%m-%d").unwrap()))
     } else if re_option.is_match(line) {
@@ -245,12 +246,12 @@ fn get_section_variant(entry: &str) -> Result<EntryType, anyhow::Error> {
 
 fn sort_entries(entries: Vec<Entry>) -> Result<Vec<Entry>, anyhow::Error> {
     let mut sorted_entries: Vec<Entry> = Vec::new();
-    let deco = "€".repeat(NDECO);
+    let deco = DECO.repeat(NDECO);
     for section in SECTIONS {
         if section != "Header" {
-            let section_string: String = {";".to_string() + &deco.clone() + &"€".repeat(section.len()) + &deco + "\n" +
+            let section_string: String = {";".to_string() + &deco.clone() + &DECO.repeat(section.len()) + &deco + "\n" +
                                 ";" + &deco + section + &deco + "\n" +
-                                ";" + &deco + &"€".repeat(section.len()) + &deco};
+                                ";" + &deco + &DECO.repeat(section.len()) + &deco};
             let section_entry = Entry{content: section_string,
                                       date: NaiveDate::from_ymd(1990, 1, 1),
                                       entry_type: EntryType::Section};
