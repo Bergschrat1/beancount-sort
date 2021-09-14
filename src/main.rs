@@ -21,7 +21,7 @@ struct Cli {
     spaces: bool,
 }
 
-const SECTIONS: [&str; 7] = ["Header",  "Accounts", "Options", "Commodities", "Other Entries", "Prices", "Transactions"];
+const SECTIONS: [&str; 7] = ["Header", "Options", "Accounts", "Commodities", "Other Entries", "Prices", "Transactions"];
 const NDECO: usize = 4; // number of "$" to use at section headings
 const DECO: &str = "€";
 
