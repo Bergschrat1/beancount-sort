@@ -201,13 +201,14 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
             // If line is an indented line: ignore it
             Line::Empty => continue,
         };
+        // If the line is a Comment then add it to the content of the previous Entry
         if !(n_skip == 0 && nn == 1) {
             if let EntryType::Comment = ledger_file.entries.last().unwrap().entry_type {
                 let comment_entry = ledger_file.entries.pop().unwrap();
                 entry.content = comment_entry.content + "\n" + &entry.content;
+            }
         }
-
-        }
+        // If the line is indented and the last entry was either a Transaction or a Commodity then add its content to the previous Entrys content
         if let EntryType::Indented = entry.entry_type {
             let last_entry = ledger_file.entries.pop().unwrap();
             // continue only if last line was a MultiLine-Entry
