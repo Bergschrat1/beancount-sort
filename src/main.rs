@@ -248,12 +248,16 @@ fn get_section_variant(entry: &str) -> Result<EntryType, anyhow::Error> {
 }
 
 /// Sorts a [Vec] of [Entry] by their date and their section
-fn sort_entries(entries: Vec<Entry>) -> Result<Vec<Entry>, anyhow::Error> {
+fn sort_entries(mut entries: Vec<Entry>) -> Result<Vec<Entry>, anyhow::Error> {
+    entries.sort_by_key(|e| e.date);
     let mut sorted_entries: Vec<Entry> = Vec::new();
     let deco = DECO.repeat(NDECO);
+    println!("{:?}", SECTIONS);
     for section in SECTIONS {
+        // create a new entry with the section heading like:
+        // ;€€€€€€€€€€€€€€€\n;€€€€Options€€€€\n;€€€€€€€€€€€€€€€
         if section != "Header" {
-            let section_string: String = {";".to_string() + &deco.clone() + &DECO.repeat(section.len()) + &deco + "\n" +
+
                                 ";" + &deco + section + &deco + "\n" +
                                 ";" + &deco + &DECO.repeat(section.len()) + &deco};
             let section_entry = Entry{content: section_string,
@@ -301,5 +305,32 @@ mod test {
         assert_eq!(discriminant(&get_section_variant("Prices").unwrap()), discriminant(&EntryType::Price));
         assert_eq!(discriminant(&get_section_variant("Transactions").unwrap()), discriminant(&EntryType::Transaction));
         assert!(get_section_variant("abcdefg").is_err());
+    }
+    #[test]
+    fn test_sort_entries() {
+        let entries = vec![
+            Entry{content:"3".to_string(), date: NaiveDate::from_ymd(2021, 01, 01), entry_type: EntryType::Transaction},
+            Entry{content:"1".to_string(), date: NaiveDate::from_ymd(2021, 01, 02), entry_type: EntryType::Option},
+            Entry{content:"2".to_string(), date: NaiveDate::from_ymd(2021, 01, 03), entry_type: EntryType::Account},
+        ];
+        let mut sorted_entries_function = sort_entries(entries).unwrap();
+        let sorted_entries_manual = [
+            Entry{content:"1".to_string(), date: NaiveDate::from_ymd(2021, 01, 02), entry_type: EntryType::Option},
+            Entry{content:"2".to_string(), date: NaiveDate::from_ymd(2021, 01, 03), entry_type: EntryType::Account},
+            Entry{content:"3".to_string(), date: NaiveDate::from_ymd(2021, 01, 01), entry_type: EntryType::Transaction},
+        ];
+        let mut i = 0;
+        while i < sorted_entries_function.len() {
+            if mem::discriminant(&sorted_entries_function[i].entry_type) == mem::discriminant(&EntryType::Section) {
+                let val = sorted_entries_function.remove(i);
+                // your code here
+            } else {
+                i += 1;
+            }
+        }
+        // const SECTIONS: [&str; 7] = ["Header", "Options", "Accounts", "Commodities", "Other Entries", "Prices", "Transactions"];
+        assert_eq!(sorted_entries_function[0].content, sorted_entries_manual[0].content);
+        assert_eq!(sorted_entries_function[1].content, sorted_entries_manual[1].content);
+        assert_eq!(sorted_entries_function[2].content, sorted_entries_manual[2].content);
     }
 }
