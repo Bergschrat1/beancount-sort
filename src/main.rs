@@ -25,6 +25,8 @@ const SECTIONS: [&str; 7] = ["Header", "Options", "Accounts", "Commodities", "Ot
 const NDECO: usize = 4; // number of "$" to use at section headings
 const DECO: &str = "€";
 
+/// The main Object that holds all information about a ledger file.
+/// Is returned by the function [read_file]
 #[derive(Debug)]
 struct LedgerFile {
     path: PathBuf,
@@ -56,6 +58,7 @@ impl LedgerFile {
     }
 }
 
+/// The Entry type holds one entry in a beancount file.
 #[derive(Debug, Clone)]
 struct Entry {
     content: String,
@@ -64,6 +67,7 @@ struct Entry {
     entry_type: EntryType,
 }
 
+/// All possible types of entries in a beancount file. Used by [Entry]
 #[derive(Debug, Clone)]
 enum EntryType {
     Account,
@@ -78,6 +82,7 @@ enum EntryType {
     Comment,
 }
 
+/// The type of a line. Returned by [get_line_type]
 #[derive(Debug, Clone)]
 enum Line {
     Date(NaiveDate),
@@ -88,6 +93,7 @@ enum Line {
     Section,
 }
 
+/// Reads a file at a given Path. Returns a Result with either a [LedgerFile] or an Error
 fn read_file(path: &Path) -> Result<LedgerFile, anyhow::Error> {
     let display = path.display();
     let ledger_file = LedgerFile {
@@ -101,19 +107,21 @@ fn read_file(path: &Path) -> Result<LedgerFile, anyhow::Error> {
     Ok(ledger_file)
 }
 
+/// Creates a backup of the original beancount file.
+/// The new name is old_name_backup.old_extension
 fn backup_file(path: &Path) -> Result<(), anyhow::Error> {
     let path_backup = path.with_file_name(format!("{}_backup.{}",
                                                   path.file_stem().unwrap().to_string_lossy(),
                                                   path.extension().unwrap().to_string_lossy()));
-    let display = path.display();
     match std::fs::copy(&path, &path_backup) {
-        Err(why) => panic!("Couldn't backup file {}: {}", display, why),
+        Err(why) => panic!("Couldn't backup file {}: {}", path.display(), why),
         Ok(file) => file,
     };
     println!("Backup done {:?} -> {:?}", &path, &path_backup);
     Ok(())
 }
 
+/// Identifies the [Line] type of a given [str].
 fn get_line_type(line: &str, n: &usize) -> Result<Line, anyhow::Error> {
     let re_first = Regex::new(r"^(.*?) ").unwrap();
     let matches = re_first.captures(line);
@@ -145,6 +153,7 @@ fn get_line_type(line: &str, n: &usize) -> Result<Line, anyhow::Error> {
     }
 }
 
+/// Creates an [Entry] from a given string and a date.
 fn construct_dated_entry(line: &str, date: NaiveDate) -> Result<Entry, anyhow::Error> {
     let re = Regex::new(r"^\d{4}-[01]\d-[0-3]\d (\w+|\*|!)").unwrap();
     let matches = re.captures(line);
@@ -179,24 +188,17 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
         let line_type: Line = get_line_type(&line, &n).unwrap();
         line_vec.push((line.clone(), line_type.clone()));
         let mut entry: Entry = match line_type {
-            // Check start of each line
-            //  - date
-            //      - Check type
-            //  - option
-            //      - save
-            //  - section
-            //      - ignore
-            //  - comment
-            //      - save and prepend to next line
-            //  - indented
-            //      - add to previous transaction
-            //  - empty
-            //      - Ignore
+            // If line has a date: create a dated entry
             Line::Date(d) => construct_dated_entry(&line, d).unwrap(),
+            // If line is an option: create an entry with default date
             Line::Option => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 1, 1), entry_type: EntryType::Option},
+            // If line is a section heading: ignore it
             Line::Section => continue,
+            // If line is a comment: create an entry with default date
             Line::Comment => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 1, 1), entry_type: EntryType::Comment},
+            // If line is an indented line: create an entry with default date
             Line::Indent => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 1, 1), entry_type: EntryType::Indented},
+            // If line is an indented line: ignore it
             Line::Empty => continue,
         };
         if !(n_skip == 0 && nn == 1) {
@@ -244,6 +246,7 @@ fn get_section_variant(entry: &str) -> Result<EntryType, anyhow::Error> {
     Ok(entry_type)
 }
 
+/// Sorts a [Vec] of [Entry] by their date and their section
 fn sort_entries(entries: Vec<Entry>) -> Result<Vec<Entry>, anyhow::Error> {
     let mut sorted_entries: Vec<Entry> = Vec::new();
     let deco = DECO.repeat(NDECO);
