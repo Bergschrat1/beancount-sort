@@ -252,7 +252,6 @@ fn sort_entries(mut entries: Vec<Entry>) -> Result<Vec<Entry>, anyhow::Error> {
     entries.sort_by_key(|e| e.date);
     let mut sorted_entries: Vec<Entry> = Vec::new();
     let deco = DECO.repeat(NDECO);
-    println!("{:?}", SECTIONS);
     for section in SECTIONS {
         // create a new entry with the section heading like:
         // ;€€€€€€€€€€€€€€€\n;€€€€Options€€€€\n;€€€€€€€€€€€€€€€
