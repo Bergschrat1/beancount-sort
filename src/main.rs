@@ -257,7 +257,7 @@ fn sort_entries(mut entries: Vec<Entry>) -> Result<Vec<Entry>, anyhow::Error> {
         // create a new entry with the section heading like:
         // ;€€€€€€€€€€€€€€€\n;€€€€Options€€€€\n;€€€€€€€€€€€€€€€
         if section != "Header" {
-
+            let section_string: String = {";".to_string() + &deco.clone() + &DECO.repeat(section.len()) + &deco + "\n" +
                                 ";" + &deco + section + &deco + "\n" +
                                 ";" + &deco + &DECO.repeat(section.len()) + &deco};
             let section_entry = Entry{content: section_string,
