@@ -1,4 +1,4 @@
-use std::{env, fs::{OpenOptions, remove_file}, io::{BufRead, BufReader, prelude::*}, mem, path::{Path, PathBuf}};
+use std::{env, fs::{OpenOptions, remove_file}, io::{BufRead, BufReader, prelude::*}, mem, path::{Path, PathBuf}, ffi::OsStr};
 use regex::Regex;
 use log::info;
 use structopt::StructOpt;
@@ -110,8 +110,12 @@ fn read_file(path: &Path) -> Result<LedgerFile, anyhow::Error> {
 /// The new name is old_name_backup.old_extension
 fn backup_file(path: &Path) -> Result<(), anyhow::Error> {
     let path_backup = path.with_file_name(format!("{}_backup.{}",
-                                                  path.file_stem()?.to_string_lossy(),
-                                                  path.extension()?.to_string_lossy()));
+                                                  path.file_stem().unwrap_or(
+                                                      OsStr::new("finances")
+                                                  ).to_string_lossy(),
+                                                  path.extension().unwrap_or(
+                                                      OsStr::new("beancount")
+                                                  ).to_string_lossy()));
     match std::fs::copy(&path, &path_backup) {
         Err(why) => panic!("Couldn't backup file {}: {}", path.display(), why),
         Ok(file) => file,
@@ -122,12 +126,6 @@ fn backup_file(path: &Path) -> Result<(), anyhow::Error> {
 
 /// Identifies the [Line] type of a given [str].
 fn get_line_type(line: &str, n: &usize) -> Result<Line, anyhow::Error> {
-    let re_first = Regex::new(r"^(.*?) ")?;
-    let matches = re_first.captures(line);
-    let first_thing = match matches {
-        Some(m) => m.get(1)?.as_str().to_string(),
-        None => String::from("")
-    };
     let re_date = Regex::new(r"^(\d{4}-[01]\d-[0-3]\d)")?;
     let re_option = Regex::new(r"^(option)")?;
     let re_comment = Regex::new(r"^(;+)")?;
@@ -135,7 +133,16 @@ fn get_line_type(line: &str, n: &usize) -> Result<Line, anyhow::Error> {
     let re_empty = Regex::new(r"^.{0}$")?;
     let re_section = Regex::new(format!("^;{}", DECO.repeat(NDECO)).as_str())?;
     if re_date.is_match(line) {
-        Ok(Line::Date(NaiveDate::parse_from_str(&first_thing, "%Y-%m-%d")?))
+        let matches = re_date.captures(line);
+        let date_match = match matches {
+        Some(m) => m.get(1),
+        None => unreachable!()
+        };
+        let date = match date_match {
+            Some(d) => d.as_str(),
+            None => unreachable!()
+        };
+        Ok(Line::Date(NaiveDate::parse_from_str(date, "%Y-%m-%d")?))
     } else if re_option.is_match(line) {
         Ok(Line::Option)
     // section has to be tested before comment
@@ -157,7 +164,7 @@ fn construct_dated_entry(line: &str, date: NaiveDate) -> Result<Entry, anyhow::E
     let re = Regex::new(r"^\d{4}-[01]\d-[0-3]\d (\w+|\*|!)")?;
     let matches = re.captures(line);
     let directive_string = match matches {
-        Some(m) => m.get(1)?.as_str(),
+        Some(m) => m.get(1).unwrap().as_str(), // unwrap is okay because this can only be a match
         None => return Err(anyhow!("Couldn't finde entry type."))
     };
     let entry = match directive_string {
@@ -175,7 +182,7 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
     let mut lines = reader.lines();
     let mut line_vec: Vec<(String, Line)> = Vec::new();
     for _i in 0..n_skip {
-        let line: String = lines.next()??;
+        let line: String = lines.next().unwrap()?;
         let entry = Entry{content: line, date: NaiveDate::from_ymd(1990, 1, 1), entry_type: EntryType::Header};
         ledger_file.entries.push(entry)
     }
@@ -202,14 +209,14 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
         };
         // If the line is a Comment then add it to the content of the previous Entry
         if !(n_skip == 0 && nn == 1) {
-            if let EntryType::Comment = ledger_file.entries.last()?.entry_type {
-                let comment_entry = ledger_file.entries.pop()?;
+            if let EntryType::Comment = ledger_file.entries.last().unwrap().entry_type {
+                let comment_entry = ledger_file.entries.pop().unwrap();
                 entry.content = comment_entry.content + "\n" + &entry.content;
             }
         }
         // If the line is indented and the last entry was either a Transaction or a Commodity then add its content to the previous Entrys content
         if let EntryType::Indented = entry.entry_type {
-            let last_entry = ledger_file.entries.pop()?;
+            let last_entry = ledger_file.entries.pop().unwrap();
             // continue only if last line was a MultiLine-Entry
             if let EntryType::Transaction | EntryType::Commodity = last_entry.entry_type {
                 let content_new = last_entry.content.to_owned() + "\n" + &entry.content;
@@ -321,13 +328,13 @@ mod test {
 
     #[test]
     fn test_get_section_variant() {
-        assert_eq!(discriminant(&get_section_variant("Header")?), discriminant(&EntryType::Header));
-        assert_eq!(discriminant(&get_section_variant("Accounts")?), discriminant(&EntryType::Account));
-        assert_eq!(discriminant(&get_section_variant("Options")?), discriminant(&EntryType::Option));
-        assert_eq!(discriminant(&get_section_variant("Commodities")?), discriminant(&EntryType::Commodity));
-        assert_eq!(discriminant(&get_section_variant("Other Entries")?), discriminant(&EntryType::OtherEntry));
-        assert_eq!(discriminant(&get_section_variant("Prices")?), discriminant(&EntryType::Price));
-        assert_eq!(discriminant(&get_section_variant("Transactions")?), discriminant(&EntryType::Transaction));
+        assert_eq!(discriminant(&get_section_variant("Header").unwrap()), discriminant(&EntryType::Header));
+        assert_eq!(discriminant(&get_section_variant("Accounts").unwrap()), discriminant(&EntryType::Account));
+        assert_eq!(discriminant(&get_section_variant("Options").unwrap()), discriminant(&EntryType::Option));
+        assert_eq!(discriminant(&get_section_variant("Commodities").unwrap()), discriminant(&EntryType::Commodity));
+        assert_eq!(discriminant(&get_section_variant("Other Entries").unwrap()), discriminant(&EntryType::OtherEntry));
+        assert_eq!(discriminant(&get_section_variant("Prices").unwrap()), discriminant(&EntryType::Price));
+        assert_eq!(discriminant(&get_section_variant("Transactions").unwrap()), discriminant(&EntryType::Transaction));
         assert!(get_section_variant("abcdefg").is_err());
     }
     #[test]
@@ -337,7 +344,7 @@ mod test {
             Entry{content:"1".to_string(), date: NaiveDate::from_ymd(2021, 01, 02), entry_type: EntryType::Option},
             Entry{content:"2".to_string(), date: NaiveDate::from_ymd(2021, 01, 03), entry_type: EntryType::Account},
         ];
-        let mut sorted_entries_function = sort_entries(entries)?;
+        let mut sorted_entries_function = sort_entries(entries).unwrap();
         let sorted_entries_manual = [
             Entry{content:"1".to_string(), date: NaiveDate::from_ymd(2021, 01, 02), entry_type: EntryType::Option},
             Entry{content:"2".to_string(), date: NaiveDate::from_ymd(2021, 01, 03), entry_type: EntryType::Account},
@@ -357,19 +364,6 @@ mod test {
         assert_eq!(sorted_entries_function[2].content, sorted_entries_manual[2].content);
     }
     #[test]
-    fn test_construct_dated_entry() {
-        let good_line: &str = "2022-04-17 * \"Schlosspark Pankow\" \"Brezel \"";
-        let good_date: NaiveDate = NaiveDate::from_ymd(2022, 01, 01);
-        let constructed_entry: Entry = construct_dated_entry(good_line, good_date).unwrap();
-        let good_entry: Entry = Entry{
-            content: good_line.to_string(),
-            date: good_date,
-            entry_type: EntryType::Transaction
-            };
-        assert_eq!(constructed_entry, good_entry);
-    }
-    #[test]
-    #[should_panic]
     fn test_construct_dated_entry() {
         let good_line: &str = "2022-04-17 * \"Schlosspark Pankow\" \"Brezel \"";
         let good_date: NaiveDate = NaiveDate::from_ymd(2022, 01, 01);
