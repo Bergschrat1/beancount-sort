@@ -58,7 +58,7 @@ impl LedgerFile {
 }
 
 /// The Entry type holds one entry in a beancount file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Entry {
     content: String,
     //#[derivative(Default(value = "NaiveDate::from_ymd(2021, 1, 1)"))]
@@ -67,7 +67,7 @@ struct Entry {
 }
 
 /// All possible types of entries in a beancount file. Used by [Entry]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum EntryType {
     Account,
     Option,
@@ -251,12 +251,11 @@ fn sort_entries(mut entries: Vec<Entry>) -> Result<Vec<Entry>, anyhow::Error> {
     entries.sort_by_key(|e| e.date);
     let mut sorted_entries: Vec<Entry> = Vec::new();
     let deco = DECO.repeat(NDECO);
-    println!("{:?}", SECTIONS);
     for section in SECTIONS {
         // create a new entry with the section heading like:
         // ;€€€€€€€€€€€€€€€\n;€€€€Options€€€€\n;€€€€€€€€€€€€€€€
         if section != "Header" {
-
+            let section_string: String = {";".to_string() + &deco.clone() + &DECO.repeat(section.len()) + &deco + "\n" +
                                 ";" + &deco + section + &deco + "\n" +
                                 ";" + &deco + &DECO.repeat(section.len()) + &deco};
             let section_entry = Entry{content: section_string,
@@ -290,9 +289,35 @@ fn main () -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    use std::mem::discriminant;
+    use std::{mem::discriminant};
 
     use super::*;
+
+    // TODO write setup struct
+    struct Setup {
+        good_entry: Entry,
+        bad_entry: Entry,
+    }
+
+    impl Setup {
+        fn new() -> Self {
+            let good_line: &str = "2022-04-17 * \"Schlosspark Pankow\" \"Brezel \"";
+            let good_date: NaiveDate = NaiveDate::from_ymd(2022, 01, 01);
+            Self {
+                good_entry: Entry{
+                    content: good_line.to_string(),
+                    date: good_date,
+                    entry_type: EntryType::Transaction
+                },
+                bad_entry: Entry{
+ content: good_line.to_string(),
+                    date: good_date,
+                    // wrong entry type
+                    entry_type: EntryType::Account
+                },
+            }
+        }
+    }
 
     #[test]
     fn test_get_section_variant() {
@@ -321,8 +346,7 @@ mod test {
         let mut i = 0;
         while i < sorted_entries_function.len() {
             if mem::discriminant(&sorted_entries_function[i].entry_type) == mem::discriminant(&EntryType::Section) {
-                let val = sorted_entries_function.remove(i);
-                // your code here
+                sorted_entries_function.remove(i);
             } else {
                 i += 1;
             }
@@ -331,5 +355,30 @@ mod test {
         assert_eq!(sorted_entries_function[0].content, sorted_entries_manual[0].content);
         assert_eq!(sorted_entries_function[1].content, sorted_entries_manual[1].content);
         assert_eq!(sorted_entries_function[2].content, sorted_entries_manual[2].content);
+    }
+    #[test]
+    fn test_construct_dated_entry() {
+        let good_line: &str = "2022-04-17 * \"Schlosspark Pankow\" \"Brezel \"";
+        let good_date: NaiveDate = NaiveDate::from_ymd(2022, 01, 01);
+        let constructed_entry: Entry = construct_dated_entry(good_line, good_date).unwrap();
+        let good_entry: Entry = Entry{
+            content: good_line.to_string(),
+            date: good_date,
+            entry_type: EntryType::Transaction
+            };
+        assert_eq!(constructed_entry, good_entry);
+    }
+    #[test]
+    #[should_panic]
+    fn test_construct_dated_entry() {
+        let good_line: &str = "2022-04-17 * \"Schlosspark Pankow\" \"Brezel \"";
+        let good_date: NaiveDate = NaiveDate::from_ymd(2022, 01, 01);
+        let constructed_entry: Entry = construct_dated_entry(good_line, good_date).unwrap();
+        let good_entry: Entry = Entry{
+            content: good_line.to_string(),
+            date: good_date,
+            entry_type: EntryType::Transaction
+            };
+        assert_eq!(constructed_entry, good_entry);
     }
 }
