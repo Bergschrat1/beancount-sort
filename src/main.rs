@@ -38,12 +38,11 @@ impl LedgerFile {
         // check if path exist
         // match for every entry type and append content to file
         if path.exists() {
-            remove_file(path).unwrap()
+            remove_file(path)?;
         };
         let mut file = OpenOptions::new().create(true)
                                          .append(true)
-                                         .open(path)
-                                         .unwrap();
+                                         .open(path)?;
         for entry in self.entries {
             let output = entry.content;
             if let Err(e) = writeln!(file, "{}", &output) {
@@ -51,7 +50,7 @@ impl LedgerFile {
             };
             if *spaces {
                 // insert empty line if "spaces" flag is given
-                writeln!(file).unwrap()
+                writeln!(file)?
             };
         };
         Ok(())
@@ -111,8 +110,8 @@ fn read_file(path: &Path) -> Result<LedgerFile, anyhow::Error> {
 /// The new name is old_name_backup.old_extension
 fn backup_file(path: &Path) -> Result<(), anyhow::Error> {
     let path_backup = path.with_file_name(format!("{}_backup.{}",
-                                                  path.file_stem().unwrap().to_string_lossy(),
-                                                  path.extension().unwrap().to_string_lossy()));
+                                                  path.file_stem()?.to_string_lossy(),
+                                                  path.extension()?.to_string_lossy()));
     match std::fs::copy(&path, &path_backup) {
         Err(why) => panic!("Couldn't backup file {}: {}", path.display(), why),
         Ok(file) => file,
@@ -123,20 +122,20 @@ fn backup_file(path: &Path) -> Result<(), anyhow::Error> {
 
 /// Identifies the [Line] type of a given [str].
 fn get_line_type(line: &str, n: &usize) -> Result<Line, anyhow::Error> {
-    let re_first = Regex::new(r"^(.*?) ").unwrap();
+    let re_first = Regex::new(r"^(.*?) ")?;
     let matches = re_first.captures(line);
     let first_thing = match matches {
-        Some(m) => m.get(1).unwrap().as_str().to_string(),
+        Some(m) => m.get(1)?.as_str().to_string(),
         None => String::from("")
     };
-    let re_date = Regex::new(r"^(\d{4}-[01]\d-[0-3]\d)").unwrap();
-    let re_option = Regex::new(r"^(option)").unwrap();
-    let re_comment = Regex::new(r"^(;+)").unwrap();
-    let re_indented = Regex::new(r"(?m)(^ +)\S").unwrap();
-    let re_empty = Regex::new(r"^.{0}$").unwrap();
-    let re_section = Regex::new(format!("^;{}", DECO.repeat(NDECO)).as_str()).unwrap();
+    let re_date = Regex::new(r"^(\d{4}-[01]\d-[0-3]\d)")?;
+    let re_option = Regex::new(r"^(option)")?;
+    let re_comment = Regex::new(r"^(;+)")?;
+    let re_indented = Regex::new(r"(?m)(^ +)\S")?;
+    let re_empty = Regex::new(r"^.{0}$")?;
+    let re_section = Regex::new(format!("^;{}", DECO.repeat(NDECO)).as_str())?;
     if re_date.is_match(line) {
-        Ok(Line::Date(NaiveDate::parse_from_str(&first_thing, "%Y-%m-%d").unwrap()))
+        Ok(Line::Date(NaiveDate::parse_from_str(&first_thing, "%Y-%m-%d")?))
     } else if re_option.is_match(line) {
         Ok(Line::Option)
     // section has to be tested before comment
@@ -155,10 +154,10 @@ fn get_line_type(line: &str, n: &usize) -> Result<Line, anyhow::Error> {
 
 /// Creates an [Entry] from a given string and a date.
 fn construct_dated_entry(line: &str, date: NaiveDate) -> Result<Entry, anyhow::Error> {
-    let re = Regex::new(r"^\d{4}-[01]\d-[0-3]\d (\w+|\*|!)").unwrap();
+    let re = Regex::new(r"^\d{4}-[01]\d-[0-3]\d (\w+|\*|!)")?;
     let matches = re.captures(line);
     let directive_string = match matches {
-        Some(m) => m.get(1).unwrap().as_str(),
+        Some(m) => m.get(1)?.as_str(),
         None => return Err(anyhow!("Couldn't finde entry type."))
     };
     let entry = match directive_string {
@@ -176,7 +175,7 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
     let mut lines = reader.lines();
     let mut line_vec: Vec<(String, Line)> = Vec::new();
     for _i in 0..n_skip {
-        let line: String = lines.next().unwrap().unwrap();
+        let line: String = lines.next()??;
         let entry = Entry{content: line, date: NaiveDate::from_ymd(1990, 1, 1), entry_type: EntryType::Header};
         ledger_file.entries.push(entry)
     }
@@ -184,12 +183,12 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
     for (mut nn, line) in lines.enumerate() {
         nn += 1;
         let n = nn + n_skip;
-        let line: String = line.unwrap();
-        let line_type: Line = get_line_type(&line, &n).unwrap();
+        let line: String = line?;
+        let line_type: Line = get_line_type(&line, &n)?;
         line_vec.push((line.clone(), line_type.clone()));
         let mut entry: Entry = match line_type {
             // If line has a date: create a dated entry
-            Line::Date(d) => construct_dated_entry(&line, d).unwrap(),
+            Line::Date(d) => construct_dated_entry(&line, d)?,
             // If line is an option: create an entry with default date
             Line::Option => Entry{content: line.to_owned(), date: NaiveDate::from_ymd(1990, 1, 1), entry_type: EntryType::Option},
             // If line is a section heading: ignore it
@@ -203,14 +202,14 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
         };
         // If the line is a Comment then add it to the content of the previous Entry
         if !(n_skip == 0 && nn == 1) {
-            if let EntryType::Comment = ledger_file.entries.last().unwrap().entry_type {
-                let comment_entry = ledger_file.entries.pop().unwrap();
+            if let EntryType::Comment = ledger_file.entries.last()?.entry_type {
+                let comment_entry = ledger_file.entries.pop()?;
                 entry.content = comment_entry.content + "\n" + &entry.content;
             }
         }
         // If the line is indented and the last entry was either a Transaction or a Commodity then add its content to the previous Entrys content
         if let EntryType::Indented = entry.entry_type {
-            let last_entry = ledger_file.entries.pop().unwrap();
+            let last_entry = ledger_file.entries.pop()?;
             // continue only if last line was a MultiLine-Entry
             if let EntryType::Transaction | EntryType::Commodity = last_entry.entry_type {
                 let content_new = last_entry.content.to_owned() + "\n" + &entry.content;
@@ -265,7 +264,7 @@ fn sort_entries(mut entries: Vec<Entry>) -> Result<Vec<Entry>, anyhow::Error> {
                                       entry_type: EntryType::Section};
             sorted_entries.push(section_entry);
         }
-        let section_variant = get_section_variant(section).unwrap();
+        let section_variant = get_section_variant(section)?;
         let entries_iter = entries.iter();
         entries_iter.filter(|e| mem::discriminant(&e.entry_type) == mem::discriminant(&section_variant))
                     .for_each(|entry| {
@@ -281,10 +280,10 @@ fn main () -> Result<()> {
     info!("Current directory is {:?}", current_dir);
     println!("Selected beancount file is {:?}", &args.file);
     backup_file(&args.file)?;
-    let mut ledger_file = read_file(&args.file).unwrap();
-    ledger_file = find_entries(ledger_file, args.skipn).unwrap();
-    ledger_file.entries = sort_entries(ledger_file.entries).unwrap();
-    ledger_file.write_ledger_file(&args.out, &args.spaces).unwrap();
+    let mut ledger_file = read_file(&args.file)?;
+    ledger_file = find_entries(ledger_file, args.skipn)?;
+    ledger_file.entries = sort_entries(ledger_file.entries)?;
+    ledger_file.write_ledger_file(&args.out, &args.spaces)?;
     Ok(())
 }
 
@@ -297,13 +296,13 @@ mod test {
 
     #[test]
     fn test_get_section_variant() {
-        assert_eq!(discriminant(&get_section_variant("Header").unwrap()), discriminant(&EntryType::Header));
-        assert_eq!(discriminant(&get_section_variant("Accounts").unwrap()), discriminant(&EntryType::Account));
-        assert_eq!(discriminant(&get_section_variant("Options").unwrap()), discriminant(&EntryType::Option));
-        assert_eq!(discriminant(&get_section_variant("Commodities").unwrap()), discriminant(&EntryType::Commodity));
-        assert_eq!(discriminant(&get_section_variant("Other Entries").unwrap()), discriminant(&EntryType::OtherEntry));
-        assert_eq!(discriminant(&get_section_variant("Prices").unwrap()), discriminant(&EntryType::Price));
-        assert_eq!(discriminant(&get_section_variant("Transactions").unwrap()), discriminant(&EntryType::Transaction));
+        assert_eq!(discriminant(&get_section_variant("Header")?), discriminant(&EntryType::Header));
+        assert_eq!(discriminant(&get_section_variant("Accounts")?), discriminant(&EntryType::Account));
+        assert_eq!(discriminant(&get_section_variant("Options")?), discriminant(&EntryType::Option));
+        assert_eq!(discriminant(&get_section_variant("Commodities")?), discriminant(&EntryType::Commodity));
+        assert_eq!(discriminant(&get_section_variant("Other Entries")?), discriminant(&EntryType::OtherEntry));
+        assert_eq!(discriminant(&get_section_variant("Prices")?), discriminant(&EntryType::Price));
+        assert_eq!(discriminant(&get_section_variant("Transactions")?), discriminant(&EntryType::Transaction));
         assert!(get_section_variant("abcdefg").is_err());
     }
     #[test]
@@ -313,7 +312,7 @@ mod test {
             Entry{content:"1".to_string(), date: NaiveDate::from_ymd(2021, 01, 02), entry_type: EntryType::Option},
             Entry{content:"2".to_string(), date: NaiveDate::from_ymd(2021, 01, 03), entry_type: EntryType::Account},
         ];
-        let mut sorted_entries_function = sort_entries(entries).unwrap();
+        let mut sorted_entries_function = sort_entries(entries)?;
         let sorted_entries_manual = [
             Entry{content:"1".to_string(), date: NaiveDate::from_ymd(2021, 01, 02), entry_type: EntryType::Option},
             Entry{content:"2".to_string(), date: NaiveDate::from_ymd(2021, 01, 03), entry_type: EntryType::Account},
