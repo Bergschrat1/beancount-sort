@@ -2,7 +2,7 @@ use std::{env, fs::{OpenOptions, remove_file}, io::{BufRead, BufReader, prelude:
 use regex::Regex;
 use log::info;
 use structopt::StructOpt;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, Context};
 use chrono::naive::NaiveDate;
 
 #[derive(StructOpt)]
@@ -22,19 +22,18 @@ struct Cli {
 }
 
 const SECTIONS: [&str; 7] = ["Header", "Options", "Accounts", "Commodities", "Other Entries", "Prices", "Transactions"];
-const NDECO: usize = 4; // number of "$" to use at section headings
+const NDECO: usize = 4; // number of DECO to use at section headings
 const DECO: &str = "€";
 
 /// The main Object that holds all information about a ledger file.
 /// Is returned by the function [read_file]
 #[derive(Debug)]
 struct LedgerFile {
-    path: PathBuf,
     file: std::fs::File,
     entries: Vec<Entry>
 }
 impl LedgerFile {
-    fn write_ledger_file(self, path: &Path, spaces: &bool) -> Result<(), anyhow::Error> {
+    fn write_ledger_file(self, path: &Path, spaces: &bool) -> Result<()> {
         // check if path exist
         // match for every entry type and append content to file
         if path.exists() {
@@ -93,14 +92,10 @@ enum Line {
 }
 
 /// Reads a file at a given Path. Returns a Result with either a [LedgerFile] or an Error
-fn read_file(path: &Path) -> Result<LedgerFile, anyhow::Error> {
+fn read_file(path: &Path) -> Result<LedgerFile> {
     let display = path.display();
     let ledger_file = LedgerFile {
-        path: path.to_path_buf(),
-        file: match std::fs::File::open(path) {
-            Err(why) => panic!("Couldn't open file {}: {}", display, why),
-            Ok(file) => file,
-        },
+        file: std::fs::File::open(path).context(format!("unable to open '{}'", display))?,
         entries: Vec::new()
     };
     Ok(ledger_file)
@@ -108,7 +103,7 @@ fn read_file(path: &Path) -> Result<LedgerFile, anyhow::Error> {
 
 /// Creates a backup of the original beancount file.
 /// The new name is old_name_backup.old_extension
-fn backup_file(path: &Path) -> Result<(), anyhow::Error> {
+fn backup_file(path: &Path) -> Result<()> {
     let path_backup = path.with_file_name(format!("{}_backup.{}",
                                                   path.file_stem().unwrap_or(
                                                       OsStr::new("finances")
@@ -116,16 +111,13 @@ fn backup_file(path: &Path) -> Result<(), anyhow::Error> {
                                                   path.extension().unwrap_or(
                                                       OsStr::new("beancount")
                                                   ).to_string_lossy()));
-    match std::fs::copy(&path, &path_backup) {
-        Err(why) => panic!("Couldn't backup file {}: {}", path.display(), why),
-        Ok(file) => file,
-    };
-    println!("Backup done {:?} -> {:?}", &path, &path_backup);
+    std::fs::copy(&path, &path_backup).context(format!("unable to backup '{}'", path.display()))?;
+    println!("Backup done: {} -> {}", path.display(), path_backup.display());
     Ok(())
 }
 
 /// Identifies the [Line] type of a given [str].
-fn get_line_type(line: &str, n: &usize) -> Result<Line, anyhow::Error> {
+fn get_line_type(line: &str, n: &usize) -> Result<Line> {
     let re_date = Regex::new(r"^(\d{4}-[01]\d-[0-3]\d)")?;
     let re_option = Regex::new(r"^(option)")?;
     let re_comment = Regex::new(r"^(;+)")?;
@@ -160,7 +152,7 @@ fn get_line_type(line: &str, n: &usize) -> Result<Line, anyhow::Error> {
 }
 
 /// Creates an [Entry] from a given string and a date.
-fn construct_dated_entry(line: &str, date: NaiveDate) -> Result<Entry, anyhow::Error> {
+fn construct_dated_entry(line: &str, date: NaiveDate) -> Result<Entry> {
     let re = Regex::new(r"^\d{4}-[01]\d-[0-3]\d (\w+|\*|!)")?;
     let matches = re.captures(line);
     let directive_string = match matches {
@@ -177,7 +169,7 @@ fn construct_dated_entry(line: &str, date: NaiveDate) -> Result<Entry, anyhow::E
     Ok(entry)
 }
 
-fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile, anyhow::Error> {
+fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile> {
     let reader = BufReader::new(&ledger_file.file);
     let mut lines = reader.lines();
     let mut line_vec: Vec<(String, Line)> = Vec::new();
@@ -227,7 +219,6 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
                 };
                 ledger_file.entries.push(new_entry);
             } else {
-                // otherwise panic
                 return Err(anyhow!("Misplaced indented line: Line {}\n\"{}\"", n, entry.content))
             };
         } else {
@@ -238,7 +229,7 @@ fn find_entries(mut ledger_file: LedgerFile, n_skip: usize) -> Result<LedgerFile
 }
 
 
-fn get_section_variant(entry: &str) -> Result<EntryType, anyhow::Error> {
+fn get_section_variant(entry: &str) -> Result<EntryType> {
 //["Header", "Accounts", "Options", "Commodities", "Other Entries", "Prices", "Transactions"]
     let entry_type = match entry {
         "Accounts" => EntryType::Account,
@@ -254,7 +245,7 @@ fn get_section_variant(entry: &str) -> Result<EntryType, anyhow::Error> {
 }
 
 /// Sorts a [Vec] of [Entry] by their date and their section
-fn sort_entries(mut entries: Vec<Entry>) -> Result<Vec<Entry>, anyhow::Error> {
+fn sort_entries(mut entries: Vec<Entry>) -> Result<Vec<Entry>> {
     entries.sort_by_key(|e| e.date);
     let mut sorted_entries: Vec<Entry> = Vec::new();
     let deco = DECO.repeat(NDECO);
@@ -285,8 +276,8 @@ fn main () -> Result<()> {
     let current_dir = env::current_dir();
     info!("Current directory is {:?}", current_dir);
     println!("Selected beancount file is {:?}", &args.file);
-    backup_file(&args.file)?;
     let mut ledger_file = read_file(&args.file)?;
+    backup_file(&args.file)?;
     ledger_file = find_entries(ledger_file, args.skipn)?;
     ledger_file.entries = sort_entries(ledger_file.entries)?;
     ledger_file.write_ledger_file(&args.out, &args.spaces)?;
